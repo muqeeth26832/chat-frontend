@@ -32,6 +32,9 @@ const RegisterAndLoginForm = () => {
         username,
         password,
       });
+
+      // console.log(response);
+
       if (response.data.success) {
         console.log("Operation successful");
         setUsername(formData.username);
