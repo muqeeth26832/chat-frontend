@@ -18,23 +18,41 @@ const RegisterAndLoginForm = () => {
     });
   };
 
+  const [msg, setMsg] = useState("");
+
   const handleSubmit = async (e) => {
+    setMsg("");
     e.preventDefault();
     try {
       const { username, password } = formData;
       const to = loginOrRegister === "register" ? "register" : "login";
       const url = "users/" + to;
+
       const response = await axios.post(url, {
         username,
         password,
       });
-      // console.log(response.data);
+      if (response.data.success) {
+        console.log("Operation successful");
+        setUsername(formData.username);
+        setId(response.data.id);
+        // Additional success handling (e.g., redirect, show success message)
+      } else {
+        // If success is false, treat it as an error
+        console.log(response);
+        throw new Error(response.data.message);
+      }
+      // console.log(response.data.message);
       // after registering successfully
       setUsername(formData.username);
       // we get id as we sent it (this is id in our data base)
       setId(response.data.id);
     } catch (error) {
+      // msg = error.message;
+      // alert(msg);
       console.error("Error:", error);
+      console.log(error.response.data.message);
+      setMsg(error.response.data.message);
     }
   };
 
@@ -52,7 +70,7 @@ const RegisterAndLoginForm = () => {
           <h2 className="text-2xl font-bold">
             {/* {loginOrRegister=='register'? 'Register on lamda chat':'Login'}
              */}
-             Lambda Chat
+            Lambda Chat
           </h2>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -108,6 +126,10 @@ const RegisterAndLoginForm = () => {
             </button>
           </div>
         )}
+
+        <div className="text-center">
+          <p style={{ color: "red" }}>{msg}</p>
+        </div>
       </div>
     </div>
   );
