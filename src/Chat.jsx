@@ -1,21 +1,32 @@
 import React, { useEffect, useState, useMemo, useContext } from "react";
-import { FiUser, FiSend, FiMoon, FiSun } from "react-icons/fi";
+import { FiUser, FiSend, FiMoon, FiSun, FiArrowLeft } from "react-icons/fi";
 import { UserContext } from "./UserContext";
 
 const Chat = () => {
   const [ws, setWs] = useState(null);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(""); // what i am sending
   const [contacts, setContacts] = useState({});
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [darkMode, setDarkMode] = useState(true);
   const { username, userId } = useContext(UserContext); // Get the current user's username and userId from UserContext
+  const [messageList, setMessageList] = useState([{ text: "hello" }]); // need to display this
 
   // Establish a WebSocket connection when the component mounts
   useEffect(() => {
+    connectToWs();
+  }, [selectedUserId]);
+
+  function connectToWs() {
     const ws = new WebSocket(`ws://${import.meta.env.VITE_WSL_URL}`);
     setWs(ws);
     ws.addEventListener("message", handleMessage);
-  }, []);
+    ws.addEventListener("close", () => {
+      setTimeout(() => {
+        console.log("Disconnected. Trying to reconnect.");
+        connectToWs();
+      }, 1000);
+    });
+  }
 
   // Update the online people list, excluding the current user
   function showOnlinePeople(peopleArray) {
@@ -28,19 +39,55 @@ const Chat = () => {
     setContacts(people);
   }
 
-  // Handle incoming WebSocket messages
+  // Handle incoming WebSocket messageList
   function handleMessage(e) {
     const messageData = JSON.parse(e.data);
     if ("online" in messageData) {
       showOnlinePeople(messageData.online);
+    } else if ("text" in messageData) {
+      setMessageList((prev) => [
+        ...prev,
+        {
+          isOur: false,
+          sender: messageData.sender,
+          recipient: messageData.recipient,
+          text: messageData.text,
+          id: messageData.id,
+          timestamp: new Date(messageData.timestamp),
+        },
+      ]);
     }
   }
+
+  const filteredMessageList = useMemo(() => {
+    const seen = new Set();
+    return messageList.filter((msg) => {
+      const duplicate = seen.has(msg.text + msg.timestamp + msg.isOur);
+      seen.add(msg.text + msg.timestamp + msg.isOur);
+      return !duplicate;
+    });
+  }, [messageList]);
 
   // Handle message send action
   const handleSendMessage = (e) => {
     e.preventDefault();
-    console.log("Sending message:", message);
+    if (!message.trim()) return;
+
+    ws.send(
+      JSON.stringify({
+        recipient: selectedUserId,
+        text: message,
+      })
+    );
+    setMessageList((prev) => [
+      ...prev,
+      { text: message, isOur: true,recipient:selectedUserId, timestamp: new Date(), },
+    ]);
     setMessage("");
+  };
+
+  const formatTimestamp = (date) => {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
   // Toggle between dark mode and light mode
@@ -166,53 +213,94 @@ const Chat = () => {
           </div>
         )}
 
-        {/* Chat messages */}
-        <div className="flex-grow p-4 overflow-y-auto">
-          {/* Example message */}
-          <div className="mb-4">
-            <p
-              className={`${
-                darkMode ? "bg-gray-800" : "bg-gray-200"
-              } inline-block rounded-lg px-4 py-2 max-w-xs`}
+        {/* Prompt to select a user if none is selected */}
+        {!selectedUserId && (
+          <div className="flex flex-col items-center justify-center h-full">
+            <FiArrowLeft
+              size={48}
+              className={`mb-4 ${
+                darkMode ? "text-gray-400" : "text-gray-600"
+              } animate-bounce`}
+            />
+            <div
+              className={`text-lg font-medium ${
+                darkMode ? "text-gray-400" : "text-gray-600"
+              }`}
             >
-              Hello, how are you?
-            </p>
+              Select a user from the sidebar
+            </div>
           </div>
-        </div>
+        )}
+        {/* Chat messages */}
+        {selectedUserId && (
+          <div className="flex-grow p-4 overflow-y-auto">
+            {filteredMessageList.map((msg, index) => (
+              <div
+                key={index}
+                className={`mb-4 flex ${
+                  msg.isOur ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`rounded-lg px-4 py-2 max-w-xs ${
+                    msg.isOur
+                      ? darkMode
+                        ? "bg-blue-600"
+                        : "bg-blue-500"
+                      : darkMode
+                      ? "bg-gray-700"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <p className="mb-1">{msg.text}</p>
+                  <p
+                    className={`text-xs ${
+                      msg.isOur ? "text-blue-200" : "text-gray-500"
+                    }`}
+                  >
+                    {formatTimestamp(msg.timestamp || new Date())}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Message input */}
-        <form
-          onSubmit={handleSendMessage}
-          className={`p-4 border-t ${
-            darkMode ? "border-gray-800" : "border-gray-200"
-          }`}
-        >
-          <div className="flex items-center">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type a message..."
-              className={`flex-grow mr-4 px-4 py-2 ${
-                darkMode
-                  ? "bg-gray-900 border-gray-700"
-                  : "bg-white border-gray-300"
-              } border rounded-full focus:outline-none focus:ring-2 ${
-                darkMode ? "focus:ring-white" : "focus:ring-black"
-              }`}
-            />
-            <button
-              type="submit"
-              className={`${
-                darkMode
-                  ? "bg-white text-black hover:bg-gray-200"
-                  : "bg-black text-white hover:bg-gray-800"
-              } rounded-full p-2 transition-colors`}
-            >
-              <FiSend size={24} />
-            </button>
-          </div>
-        </form>
+        {selectedUserId && (
+          <form
+            onSubmit={handleSendMessage}
+            className={`p-4 border-t ${
+              darkMode ? "border-gray-800" : "border-gray-200"
+            }`}
+          >
+            <div className="flex items-center">
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Type a message..."
+                className={`flex-grow mr-4 px-4 py-2 ${
+                  darkMode
+                    ? "bg-gray-900 border-gray-700"
+                    : "bg-white border-gray-300"
+                } border rounded-full focus:outline-none focus:ring-2 ${
+                  darkMode ? "focus:ring-white" : "focus:ring-black"
+                }`}
+              />
+              <button
+                type="submit"
+                className={`${
+                  darkMode
+                    ? "bg-white text-black hover:bg-gray-200"
+                    : "bg-black text-white hover:bg-gray-800"
+                } rounded-full p-2 transition-colors`}
+              >
+                <FiSend size={24} />
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
