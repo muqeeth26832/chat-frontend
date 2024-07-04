@@ -8,7 +8,7 @@ const RegisterAndLoginForm = () => {
   });
   const [loginOrRegister, setLoginOrRegister] = useState("register");
 
-  const { setUsername, setId } = useContext(UserContext);
+  const { setUsername, setUserId } = useContext(UserContext);
 
   // console.log(formData.username);
   const handleChange = (e) => {
@@ -34,22 +34,20 @@ const RegisterAndLoginForm = () => {
       });
 
       // console.log(response);
-
       if (response.data.success) {
         console.log("Operation successful");
+        console.log("loging it : ",response.data.data.id);
         setUsername(formData.username);
-        setId(response.data.id);
+        setUserId(response.data.data.id);
+        
+
         // Additional success handling (e.g., redirect, show success message)
       } else {
         // If success is false, treat it as an error
         console.log(response);
         throw new Error(response.data.message);
       }
-      // console.log(response.data.message);
-      // after registering successfully
       setUsername(formData.username);
-      // we get id as we sent it (this is id in our data base)
-      setId(response.data.id);
     } catch (error) {
       // msg = error.message;
       // alert(msg);
