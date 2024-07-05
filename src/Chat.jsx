@@ -1,18 +1,32 @@
 import React, { useEffect, useState, useMemo, useContext, useRef } from "react";
-import { FiUser, FiSend, FiMoon, FiSun, FiArrowLeft } from "react-icons/fi";
+import Picker from "emoji-picker-react";
+import {
+  FiUser,
+  FiSend,
+  FiMoon,
+  FiSun,
+  FiArrowLeft,
+  FiLogOut,
+} from "react-icons/fi";
+import { FaSmile, FaPaperclip } from "react-icons/fa";
+
 import { UserContext } from "./UserContext";
 import axios from "axios";
 
 const Chat = () => {
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [attachments, setAttachments] = useState([]);
   const [ws, setWs] = useState(null);
   const [message, setMessage] = useState("");
   const [onlinePeople, setOnlinePeople] = useState({});
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [darkMode, setDarkMode] = useState(true);
-  const { username, userId } = useContext(UserContext);
+  const { username, userId, setUsername, setUserId } = useContext(UserContext);
+
   const [messageList, setMessageList] = useState([]);
   const messagesEndRef = useRef(null);
   const [offlinePeople, setOfflinePeople] = useState({});
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -114,6 +128,15 @@ const Chat = () => {
     ]);
     setMessage("");
   };
+  const onEmojiClick = (event, emojiObject) => {
+    setMessage(message + emojiObject.emoji);
+    setShowEmojiPicker(false);
+  };
+
+  // Handle attachment logic here
+  const handleAttachment = () => {
+    // ... your attachment logic
+  };
 
   const formatTimestamp = (date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -138,6 +161,19 @@ const Chat = () => {
     return colors;
   }, [onlinePeople, offlinePeople]);
 
+  const handleLogout = async () => {
+    await axios.post("./users/logout").then(() => {
+      setWs(null);
+      setUserId(null);
+      setUsername(null);
+    });
+    if (ws) {
+      ws.close();
+    }
+    localStorage.removeItem("token");
+    // Implement your logout logic here, e.g., redirect to login page
+  };
+
   return (
     <div
       className={`flex h-screen overflow-hidden ${
@@ -148,45 +184,75 @@ const Chat = () => {
       <div
         className={`w-1/3 border-r ${
           darkMode ? "border-gray-700" : "border-gray-300"
-        }`}
+        } flex flex-col`}
       >
-        {/* Sidebar header */}
+        {/* Top bar with logo and dark mode toggle */}
         <div
-          className={`flex items-center justify-between p-4 border-b ${
+          className={`p-4 border-b ${
             darkMode ? "border-gray-700" : "border-gray-300"
+          } flex items-center justify-between sticky top-0 bg-opacity-90 backdrop-filter backdrop-blur-sm ${
+            darkMode ? "bg-gray-900" : "bg-gray-100"
           }`}
         >
           <div className="flex items-center space-x-3">
-            <FiUser size={24} />
-            <h2 className="text-xl font-semibold">Chats</h2>
+            {/* Custom Chat Logo */}
+            <div className="w-8 h-8">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="size-6"
+              >
+                <path d="M4.913 2.658c2.075-.27 4.19-.408 6.337-.408 2.147 0 4.262.139 6.337.408 1.922.25 3.291 1.861 3.405 3.727a4.403 4.403 0 0 0-1.032-.211 50.89 50.89 0 0 0-8.42 0c-2.358.196-4.04 2.19-4.04 4.434v4.286a4.47 4.47 0 0 0 2.433 3.984L7.28 21.53A.75.75 0 0 1 6 21v-4.03a48.527 48.527 0 0 1-1.087-.128C2.905 16.58 1.5 14.833 1.5 12.862V6.638c0-1.97 1.405-3.718 3.413-3.979Z" />
+                <path d="M15.75 7.5c-1.376 0-2.739.057-4.086.169C10.124 7.797 9 9.103 9 10.609v4.285c0 1.507 1.128 2.814 2.67 2.94 1.243.102 2.5.157 3.768.165l2.782 2.781a.75.75 0 0 0 1.28-.53v-2.39l.33-.026c1.542-.125 2.67-1.433 2.67-2.94v-4.286c0-1.505-1.125-2.811-2.664-2.94A49.392 49.392 0 0 0 15.75 7.5Z" />
+              </svg>
+            </div>
           </div>
-          <div className="flex items-center space-x-3">
-            <span
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
-                darkMode ? "bg-gray-700" : "bg-gray-300"
-              }`}
+
+          {/* Username (centered or right-aligned) */}
+          <div className="flex-grow flex justify-center">
+            {" "}
+            {/* Use 'justify-end' instead of 'justify-center' for right alignment */}
+            <div
+              className={`px-4 py-2 rounded-full ${
+                darkMode ? "bg-gray-700" : "bg-gray-200"
+              } flex items-center space-x-2`}
             >
-              {username}
-            </span>
-            <button
-              onClick={toggleDarkMode}
-              className={`p-2 rounded-full ${
-                darkMode
-                  ? "bg-gray-700 text-yellow-300"
-                  : "bg-gray-300 text-gray-700"
-              } transition-all duration-300 ease-in-out transform hover:scale-110`}
-            >
-              {darkMode ? <FiSun size={24} /> : <FiMoon size={24} />}
-            </button>
+              <div
+                className={`p-1 rounded-full ${
+                  darkMode ? "bg-gray-600" : "bg-gray-300"
+                }`}
+              >
+                <FiUser size={16} />
+              </div>
+              <span className="font-semibold text-sm truncate max-w-[150px]">
+                {username}
+              </span>
+            </div>
           </div>
+
+          {/* Dark Mode Toggle */}
+          <button
+            onClick={toggleDarkMode}
+            className={`p-2 rounded-full ${
+              darkMode
+                ? "bg-gray-700 text-yellow-300 hover:bg-gray-600"
+                : "bg-gray-300 text-gray-700 hover:bg-gray-400"
+            } transition-all duration-300 ease-in-out transform hover:scale-110`}
+          >
+            {darkMode ? <FiSun size={24} /> : <FiMoon size={24} />}
+          </button>
         </div>
-        {/* List of online and offline contacts */}
-        <div className="overflow-y-auto h-[calc(100vh-4rem)]">
+
+        {/* Scrollable area for contacts */}
+        <div className="flex-grow overflow-y-auto">
           {/* Online users */}
           {Object.keys(onlinePeople).length > 0 && (
             <div
               className={`p-2 font-semibold ${
-                darkMode ? "bg-gray-800" : "bg-gray-200"
+                darkMode
+                  ? "bg-gray-800 text-gray-300"
+                  : "bg-gray-200 text-gray-700"
               }`}
             >
               Online Users
@@ -213,7 +279,7 @@ const Chat = () => {
                     style={{ backgroundColor: userColors[contactId] }}
                   >
                     <span className="text-lg font-medium">
-                      {onlinePeople[contactId].charAt(0)}
+                      {onlinePeople[contactId].charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <span className="font-medium">{onlinePeople[contactId]}</span>
@@ -226,7 +292,9 @@ const Chat = () => {
           {Object.keys(offlinePeople).length > 0 && (
             <div
               className={`p-2 font-semibold ${
-                darkMode ? "bg-gray-800" : "bg-gray-200"
+                darkMode
+                  ? "bg-gray-800 text-gray-300"
+                  : "bg-gray-200 text-gray-700"
               }`}
             >
               Offline Users
@@ -253,7 +321,7 @@ const Chat = () => {
                     style={{ backgroundColor: userColors[contactId] }}
                   >
                     <span className="text-lg font-medium">
-                      {offlinePeople[contactId].charAt(0)}
+                      {offlinePeople[contactId].charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <span className="font-medium">
@@ -264,6 +332,27 @@ const Chat = () => {
               </li>
             ))}
           </ul>
+        </div>
+
+        {/* Bottom bar with logout button */}
+        <div
+          className={`p-4 border-t ${
+            darkMode ? "border-gray-700" : "border-gray-300"
+          } sticky bottom-0 bg-opacity-90 backdrop-filter backdrop-blur-sm ${
+            darkMode ? "bg-gray-900" : "bg-gray-100"
+          }`}
+        >
+          <button
+            onClick={handleLogout}
+            className={`w-full py-2 px-4 rounded-full font-medium transition-colors flex items-center justify-center space-x-2 ${
+              darkMode
+                ? "bg-red-600 text-white hover:bg-red-700"
+                : "bg-red-500 text-white hover:bg-red-600"
+            } shadow-md hover:shadow-lg transform hover:-translate-y-0.5`}
+          >
+            <FiLogOut size={20} />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
 
@@ -282,16 +371,21 @@ const Chat = () => {
             >
               <span className="text-lg font-medium">
                 {(
-                  onlinePeople[selectedUserId] || offlinePeople[selectedUserId]
-                ).charAt(0)}
+                  onlinePeople[selectedUserId] ||
+                  offlinePeople[selectedUserId] ||
+                  "?"
+                )
+                  .charAt(0)
+                  .toUpperCase()}
               </span>
             </div>
             <span className="font-semibold">
-              {onlinePeople[selectedUserId] || offlinePeople[selectedUserId]}
+              {onlinePeople[selectedUserId] ||
+                offlinePeople[selectedUserId] ||
+                "Unknown User"}
             </span>
           </div>
         )}
-
         {/* Prompt to select a user if none is selected */}
         {!selectedUserId && (
           <div className="flex flex-col items-center justify-center flex-grow">
@@ -310,7 +404,6 @@ const Chat = () => {
             </div>
           </div>
         )}
-
         {/* Chat messages */}
         {selectedUserId && (
           <div className="flex-grow p-4 overflow-y-auto">
@@ -346,22 +439,33 @@ const Chat = () => {
             <div ref={messagesEndRef} />
           </div>
         )}
-
         {/* Message input */}
+
         {selectedUserId && (
           <form
             onSubmit={handleSendMessage}
-            className={`p-4 border-t ${
+            className={`p-4 border-t  ${
               darkMode ? "border-gray-700" : "border-gray-300"
             }`}
           >
-            <div className="flex items-center">
+            <div className="flex items-center space-x-4">
+              <button
+                type="button"
+                onClick={handleAttachment}
+                className={`${
+                  darkMode
+                    ? "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                    : "bg-gray-300 text-gray-700 hover:bg-gray-400"
+                } p-2 rounded-full transition-colors`}
+              >
+                <FaPaperclip size={24} />
+              </button>
               <input
                 type="text"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Type a message..."
-                className={`flex-grow mr-4 px-4 py-2 ${
+                className={`flex-grow px-4 py-2 ${
                   darkMode
                     ? "bg-gray-800 border-gray-600"
                     : "bg-white border-gray-300"
