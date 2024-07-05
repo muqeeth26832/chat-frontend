@@ -1,20 +1,57 @@
-import React, { useEffect, useState, useMemo, useContext } from "react";
+import React, { useEffect, useState, useMemo, useContext, useRef } from "react";
 import { FiUser, FiSend, FiMoon, FiSun, FiArrowLeft } from "react-icons/fi";
 import { UserContext } from "./UserContext";
+import axios from "axios";
 
 const Chat = () => {
   const [ws, setWs] = useState(null);
-  const [message, setMessage] = useState(""); // what i am sending
-  const [contacts, setContacts] = useState({});
+  const [message, setMessage] = useState("");
+  const [onlinePeople, setOnlinePeople] = useState({});
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [darkMode, setDarkMode] = useState(true);
-  const { username, userId } = useContext(UserContext); // Get the current user's username and userId from UserContext
-  const [messageList, setMessageList] = useState([{ text: "hello" }]); // need to display this
+  const { username, userId } = useContext(UserContext);
+  const [messageList, setMessageList] = useState([]);
+  const messagesEndRef = useRef(null);
+  const [offlinePeople, setOfflinePeople] = useState({});
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
-  // Establish a WebSocket connection when the component mounts
+  const filteredMessageList = useMemo(() => {
+    const seen = new Set();
+    return messageList.filter((msg) => {
+      const duplicate = seen.has(msg.text + msg.timestamp + msg._id);
+      seen.add(msg.text + msg.timestamp + msg._id);
+      return !duplicate;
+    });
+  }, [messageList]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [filteredMessageList, selectedUserId]);
+
   useEffect(() => {
     connectToWs();
   }, [selectedUserId]);
+
+  useEffect(() => {
+    axios.get(`users/messages/${selectedUserId}`).then((res) => {
+      setMessageList(res.data);
+    });
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    axios.get("users/people").then((res) => {
+      const offlinePeopleList = res.data
+        .filter((p) => p._id !== userId)
+        .filter((p) => !Object.keys(onlinePeople).includes(p._id));
+      const offlinePeopleObj = {};
+      offlinePeopleList.forEach((p) => {
+        offlinePeopleObj[p._id] = p.username;
+      });
+      setOfflinePeople(offlinePeopleObj);
+    });
+  }, [onlinePeople]);
 
   function connectToWs() {
     const ws = new WebSocket(`ws://${import.meta.env.VITE_WSL_URL}`);
@@ -28,18 +65,16 @@ const Chat = () => {
     });
   }
 
-  // Update the online people list, excluding the current user
   function showOnlinePeople(peopleArray) {
-    let people = {};
+    const people = {};
     peopleArray.forEach(({ userId: id, username }) => {
       if (id !== userId) {
         people[id] = username;
       }
     });
-    setContacts(people);
+    setOnlinePeople(people);
   }
 
-  // Handle incoming WebSocket messageList
   function handleMessage(e) {
     const messageData = JSON.parse(e.data);
     if ("online" in messageData) {
@@ -48,7 +83,6 @@ const Chat = () => {
       setMessageList((prev) => [
         ...prev,
         {
-          isOur: false,
           sender: messageData.sender,
           recipient: messageData.recipient,
           text: messageData.text,
@@ -59,16 +93,6 @@ const Chat = () => {
     }
   }
 
-  const filteredMessageList = useMemo(() => {
-    const seen = new Set();
-    return messageList.filter((msg) => {
-      const duplicate = seen.has(msg.text + msg.timestamp + msg.isOur);
-      seen.add(msg.text + msg.timestamp + msg.isOur);
-      return !duplicate;
-    });
-  }, [messageList]);
-
-  // Handle message send action
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!message.trim()) return;
@@ -81,7 +105,12 @@ const Chat = () => {
     );
     setMessageList((prev) => [
       ...prev,
-      { text: message, isOur: true,recipient:selectedUserId, timestamp: new Date(), },
+      {
+        text: message,
+        sender: userId,
+        recipient: selectedUserId,
+        timestamp: new Date(),
+      },
     ]);
     setMessage("");
   };
@@ -90,42 +119,41 @@ const Chat = () => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Toggle between dark mode and light mode
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
 
-  // Generate random pastel colors for user icons
   const getRandomPastelColor = () => {
     const hue = Math.floor(Math.random() * 360);
     return `hsl(${hue}, 70%, 80%)`;
   };
 
-  // Memoize user colors to prevent re-generating colors on every render
   const userColors = useMemo(() => {
     const colors = {};
-    Object.keys(contacts).forEach((userId) => {
-      colors[userId] = getRandomPastelColor();
-    });
+    [...Object.keys(onlinePeople), ...Object.keys(offlinePeople)].forEach(
+      (userId) => {
+        colors[userId] = getRandomPastelColor();
+      }
+    );
     return colors;
-  }, [contacts]);
+  }, [onlinePeople, offlinePeople]);
 
   return (
     <div
-      className={`flex h-screen ${
-        darkMode ? "bg-black text-white" : "bg-white text-black"
+      className={`flex h-screen overflow-hidden ${
+        darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-black"
       } transition-colors duration-300`}
     >
       {/* Left sidebar */}
       <div
         className={`w-1/3 border-r ${
-          darkMode ? "border-gray-800" : "border-gray-200"
+          darkMode ? "border-gray-700" : "border-gray-300"
         }`}
       >
-        {/* Sidebar header with user info and theme toggle */}
+        {/* Sidebar header */}
         <div
           className={`flex items-center justify-between p-4 border-b ${
-            darkMode ? "border-gray-800" : "border-gray-200"
+            darkMode ? "border-gray-700" : "border-gray-300"
           }`}
         >
           <div className="flex items-center space-x-3">
@@ -135,7 +163,7 @@ const Chat = () => {
           <div className="flex items-center space-x-3">
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium ${
-                darkMode ? "bg-gray-700" : "bg-gray-200"
+                darkMode ? "bg-gray-700" : "bg-gray-300"
               }`}
             >
               {username}
@@ -144,29 +172,39 @@ const Chat = () => {
               onClick={toggleDarkMode}
               className={`p-2 rounded-full ${
                 darkMode
-                  ? "bg-gray-800 text-yellow-300"
-                  : "bg-gray-200 text-gray-800"
+                  ? "bg-gray-700 text-yellow-300"
+                  : "bg-gray-300 text-gray-700"
               } transition-all duration-300 ease-in-out transform hover:scale-110`}
             >
               {darkMode ? <FiSun size={24} /> : <FiMoon size={24} />}
             </button>
           </div>
         </div>
-        {/* List of online contacts */}
+        {/* List of online and offline contacts */}
         <div className="overflow-y-auto h-[calc(100vh-4rem)]">
+          {/* Online users */}
+          {Object.keys(onlinePeople).length > 0 && (
+            <div
+              className={`p-2 font-semibold ${
+                darkMode ? "bg-gray-800" : "bg-gray-200"
+              }`}
+            >
+              Online Users
+            </div>
+          )}
           <ul>
-            {Object.keys(contacts).map((contactId) => (
+            {Object.keys(onlinePeople).map((contactId) => (
               <li
                 onClick={() => setSelectedUserId(contactId)}
                 key={contactId}
                 className={`px-4 py-3 cursor-pointer transition-colors ${
                   contactId === selectedUserId
                     ? darkMode
-                      ? "bg-gray-800"
-                      : "bg-gray-200"
+                      ? "bg-gray-700"
+                      : "bg-gray-300"
                     : darkMode
-                    ? "hover:bg-gray-900"
-                    : "hover:bg-gray-100"
+                    ? "hover:bg-gray-800"
+                    : "hover:bg-gray-200"
                 }`}
               >
                 <div className="flex items-center space-x-3">
@@ -175,16 +213,53 @@ const Chat = () => {
                     style={{ backgroundColor: userColors[contactId] }}
                   >
                     <span className="text-lg font-medium">
-                      {contacts[contactId].charAt(0)}
+                      {onlinePeople[contactId].charAt(0)}
                     </span>
                   </div>
-                  <span
-                    className={`font-medium ${
-                      contactId === selectedUserId ? "cursor-default" : ""
-                    }`}
+                  <span className="font-medium">{onlinePeople[contactId]}</span>
+                  <span className="ml-auto w-3 h-3 bg-green-500 rounded-full"></span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {/* Offline users */}
+          {Object.keys(offlinePeople).length > 0 && (
+            <div
+              className={`p-2 font-semibold ${
+                darkMode ? "bg-gray-800" : "bg-gray-200"
+              }`}
+            >
+              Offline Users
+            </div>
+          )}
+          <ul>
+            {Object.keys(offlinePeople).map((contactId) => (
+              <li
+                onClick={() => setSelectedUserId(contactId)}
+                key={contactId}
+                className={`px-4 py-3 cursor-pointer transition-colors ${
+                  contactId === selectedUserId
+                    ? darkMode
+                      ? "bg-gray-700"
+                      : "bg-gray-300"
+                    : darkMode
+                    ? "hover:bg-gray-800"
+                    : "hover:bg-gray-200"
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-black"
+                    style={{ backgroundColor: userColors[contactId] }}
                   >
-                    {contacts[contactId]}
+                    <span className="text-lg font-medium">
+                      {offlinePeople[contactId].charAt(0)}
+                    </span>
+                  </div>
+                  <span className="font-medium">
+                    {offlinePeople[contactId]}
                   </span>
+                  <span className="ml-auto w-3 h-3 bg-gray-500 rounded-full"></span>
                 </div>
               </li>
             ))}
@@ -193,12 +268,12 @@ const Chat = () => {
       </div>
 
       {/* Chat area */}
-      <div className="flex flex-col w-2/3">
+      <div className="flex flex-col w-2/3 h-screen">
         {/* Selected user header */}
         {selectedUserId && (
           <div
             className={`p-4 border-b ${
-              darkMode ? "border-gray-800" : "border-gray-200"
+              darkMode ? "border-gray-700" : "border-gray-300"
             } flex items-center`}
           >
             <div
@@ -206,31 +281,36 @@ const Chat = () => {
               style={{ backgroundColor: userColors[selectedUserId] }}
             >
               <span className="text-lg font-medium">
-                {contacts[selectedUserId].charAt(0)}
+                {(
+                  onlinePeople[selectedUserId] || offlinePeople[selectedUserId]
+                ).charAt(0)}
               </span>
             </div>
-            <span className="font-semibold">{contacts[selectedUserId]}</span>
+            <span className="font-semibold">
+              {onlinePeople[selectedUserId] || offlinePeople[selectedUserId]}
+            </span>
           </div>
         )}
 
         {/* Prompt to select a user if none is selected */}
         {!selectedUserId && (
-          <div className="flex flex-col items-center justify-center h-full">
+          <div className="flex flex-col items-center justify-center flex-grow">
             <FiArrowLeft
               size={48}
               className={`mb-4 ${
-                darkMode ? "text-gray-400" : "text-gray-600"
+                darkMode ? "text-gray-500" : "text-gray-400"
               } animate-bounce`}
             />
             <div
               className={`text-lg font-medium ${
-                darkMode ? "text-gray-400" : "text-gray-600"
+                darkMode ? "text-gray-500" : "text-gray-400"
               }`}
             >
               Select a user from the sidebar
             </div>
           </div>
         )}
+
         {/* Chat messages */}
         {selectedUserId && (
           <div className="flex-grow p-4 overflow-y-auto">
@@ -238,24 +318,24 @@ const Chat = () => {
               <div
                 key={index}
                 className={`mb-4 flex ${
-                  msg.isOur ? "justify-end" : "justify-start"
+                  msg.sender === userId ? "justify-end" : "justify-start"
                 }`}
               >
                 <div
                   className={`rounded-lg px-4 py-2 max-w-xs ${
-                    msg.isOur
+                    msg.sender === userId
                       ? darkMode
                         ? "bg-blue-600"
                         : "bg-blue-500"
                       : darkMode
                       ? "bg-gray-700"
-                      : "bg-gray-200"
+                      : "bg-gray-300"
                   }`}
                 >
                   <p className="mb-1">{msg.text}</p>
                   <p
                     className={`text-xs ${
-                      msg.isOur ? "text-blue-200" : "text-gray-500"
+                      msg.sender === userId ? "text-blue-200" : "text-gray-500"
                     }`}
                   >
                     {formatTimestamp(msg.timestamp || new Date())}
@@ -263,6 +343,7 @@ const Chat = () => {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
         )}
 
@@ -271,7 +352,7 @@ const Chat = () => {
           <form
             onSubmit={handleSendMessage}
             className={`p-4 border-t ${
-              darkMode ? "border-gray-800" : "border-gray-200"
+              darkMode ? "border-gray-700" : "border-gray-300"
             }`}
           >
             <div className="flex items-center">
@@ -282,7 +363,7 @@ const Chat = () => {
                 placeholder="Type a message..."
                 className={`flex-grow mr-4 px-4 py-2 ${
                   darkMode
-                    ? "bg-gray-900 border-gray-700"
+                    ? "bg-gray-800 border-gray-600"
                     : "bg-white border-gray-300"
                 } border rounded-full focus:outline-none focus:ring-2 ${
                   darkMode ? "focus:ring-white" : "focus:ring-black"
