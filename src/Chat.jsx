@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo, useContext, useRef } from "react";
-import Picker from "emoji-picker-react";
 import {
   FiUser,
   FiSend,
@@ -8,28 +7,25 @@ import {
   FiArrowLeft,
   FiLogOut,
 } from "react-icons/fi";
-import { FaSmile, FaPaperclip } from "react-icons/fa";
+import { FaPaperclip } from "react-icons/fa";
 
 import { UserContext } from "./UserContext";
 import axios from "axios";
 
 const Chat = () => {
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [attachments, setAttachments] = useState([]);
   const [ws, setWs] = useState(null);
   const [message, setMessage] = useState("");
   const [onlinePeople, setOnlinePeople] = useState({});
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [darkMode, setDarkMode] = useState(true);
   const { username, userId, setUsername, setUserId } = useContext(UserContext);
-
   const [messageList, setMessageList] = useState([]);
   const messagesEndRef = useRef(null);
   const [offlinePeople, setOfflinePeople] = useState({});
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  useEffect(() => {
+    connectToWs();
+  }, [selectedUserId]);
 
   const filteredMessageList = useMemo(() => {
     const seen = new Set();
@@ -39,14 +35,9 @@ const Chat = () => {
       return !duplicate;
     });
   }, [messageList]);
-
   useEffect(() => {
     scrollToBottom();
   }, [filteredMessageList, selectedUserId]);
-
-  useEffect(() => {
-    connectToWs();
-  }, [selectedUserId]);
 
   useEffect(() => {
     axios.get(`users/messages/${selectedUserId}`).then((res) => {
@@ -66,6 +57,9 @@ const Chat = () => {
       setOfflinePeople(offlinePeopleObj);
     });
   }, [onlinePeople]);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   function connectToWs() {
     const ws = new WebSocket(`ws://${import.meta.env.VITE_WSL_URL}`);
@@ -80,7 +74,7 @@ const Chat = () => {
   }
 
   function showOnlinePeople(peopleArray) {
-    const people = {};
+    let people = {};
     peopleArray.forEach(({ userId: id, username }) => {
       if (id !== userId) {
         people[id] = username;
@@ -89,8 +83,13 @@ const Chat = () => {
     setOnlinePeople(people);
   }
 
+  function handleAttachment(e) {
+    console.log("ok");
+  }
+
   function handleMessage(e) {
     const messageData = JSON.parse(e.data);
+
     if ("online" in messageData) {
       showOnlinePeople(messageData.online);
     } else if ("text" in messageData) {
@@ -127,15 +126,6 @@ const Chat = () => {
       },
     ]);
     setMessage("");
-  };
-  const onEmojiClick = (event, emojiObject) => {
-    setMessage(message + emojiObject.emoji);
-    setShowEmojiPicker(false);
-  };
-
-  // Handle attachment logic here
-  const handleAttachment = () => {
-    // ... your attachment logic
   };
 
   const formatTimestamp = (date) => {
